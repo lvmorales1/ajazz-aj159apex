@@ -5,7 +5,10 @@ import sys
 from pathlib import Path
 
 from .backend import BackendUnavailableError, apply_dpi_change, plan_dpi_change
+from .debug import capture_device_reports, print_report_analysis
+from .diagnose import print_diagnostics
 from .discovery import UsbDevice, find_usb_devices
+from .hid_protocol import HidDeviceError
 
 
 def _format_device(device: UsbDevice) -> str:
@@ -50,6 +53,15 @@ def _build_parser() -> argparse.ArgumentParser:
     dpi_parser.add_argument("--path", type=Path, help="select a device directly by sysfs path")
     dpi_parser.add_argument("--dpi", type=int, required=True, help="requested DPI value")
     dpi_parser.add_argument("--dry-run", action="store_true", help="do not apply, only print the planned action")
+
+    capture_parser = subparsers.add_parser("capture", help="capture raw HID reports for protocol analysis")
+    capture_parser.add_argument("--query", help="select a device by matching metadata")
+    capture_parser.add_argument("--path", type=Path, help="select a device directly by sysfs path")
+    capture_parser.add_argument("--duration", type=float, default=5.0, help="capture duration in seconds (default: 5)")
+
+    diagnose_parser = subparsers.add_parser("diagnose", help="diagnose device and kernel HID support")
+    diagnose_parser.add_argument("--query", help="select a device by matching metadata")
+    diagnose_parser.add_argument("--path", type=Path, help="select a device directly by sysfs path")
 
     return parser
 
@@ -106,6 +118,33 @@ def main(argv: list[str] | None = None) -> int:
         except BackendUnavailableError as exc:
             print(str(exc), file=sys.stderr)
             return 3
+        return 0
+
+    if args.command == "capture":
+        device = _select_device(args)
+        if device is None:
+            print("No device matched the selection.", file=sys.stderr)
+            return 1
+
+        print(f"Capturing from {device.summary()} for {args.duration} seconds...")
+        print("Press buttons or change settings on your mouse to generate events.\n")
+
+        try:
+            reports = capture_device_reports(device, duration_seconds=args.duration)
+        except HidDeviceError as exc:
+            print(str(exc), file=sys.stderr)
+            return 4
+
+        print_report_analysis(reports)
+        return 0
+
+    if args.command == "diagnose":
+        device = _select_device(args)
+        if device is None:
+            print("No device matched the selection.", file=sys.stderr)
+            return 1
+
+        print_diagnostics(device)
         return 0
 
     parser.error("unknown command")
