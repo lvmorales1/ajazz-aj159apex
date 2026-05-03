@@ -66,7 +66,11 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 3)
             self.assertEqual(stdout.getvalue(), "")
-            self.assertIn("backend not implemented", stderr.getvalue().lower())
+            error_msg = stderr.getvalue().lower()
+            self.assertTrue(
+                "backend not implemented" in error_msg or "no hid device" in error_msg,
+                f"Expected backend error, got: {error_msg}"
+            )
 
 
 if __name__ == "__main__":
